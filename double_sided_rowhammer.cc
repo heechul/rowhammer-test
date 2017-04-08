@@ -75,18 +75,26 @@ uint64_t GetPageFrameNumber(int pagemap, uint8_t* virtual_address) {
   return page_frame_number;
 }
 
-#define ARCH_X86_SB 1
+#define ARCH_X86_SB 1        // sandybridge, i5-2410m, 8GB.
+#define ARCH_X86_NH_1DIMM 0  // nehalem, w3530, 4GB (1dimm)
+
 #define BIT(addr, idx) ((addr >> idx) & 0x1)
   
 int GetBankNumber(int64_t paddr)
 {
   int bank = -1;
-#if ARCH_X86_SB==1
+#if ARCH_X86_SB == 1
   bank =
     (BIT(paddr, 14) ^ BIT(paddr, 18))*1 +
     (BIT(paddr, 15) ^ BIT(paddr, 19))*2 +
     (BIT(paddr, 16) ^ BIT(paddr, 20))*4 +
     (BIT(paddr, 17) ^ BIT(paddr, 21))*8;
+#elif ARCH_X86_NH == 1
+  bank =
+    BIT(paddr, 12) * 1 +
+    BIT(paddr, 13) * 2 +
+    BIT(paddr, 19) * 4 +
+    BIT(paddr, 20) * 8
 #endif
   return bank;
 }
