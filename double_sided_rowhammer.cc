@@ -89,12 +89,12 @@ int GetBankNumber(int64_t paddr)
     (BIT(paddr, 15) ^ BIT(paddr, 19))*2 +
     (BIT(paddr, 16) ^ BIT(paddr, 20))*4 +
     (BIT(paddr, 17) ^ BIT(paddr, 21))*8;
-#elif ARCH_X86_NH == 1
+#elif ARCH_X86_NH_1DIMM == 1
   bank =
     BIT(paddr, 12) * 1 +
     BIT(paddr, 13) * 2 +
     BIT(paddr, 19) * 4 +
-    BIT(paddr, 20) * 8
+    BIT(paddr, 20) * 8;
 #endif
   return bank;
 }
@@ -180,13 +180,13 @@ uint64_t HammerAllReachablePages(uint64_t presumed_row_size,
       ++row_index) {
     if ((pages_per_row[row_index].size() != 64) || 
         (pages_per_row[row_index+2].size() != 64)) {
-      printf("[!] Can't hammer row %ld - only got %ld/%ld pages "
+      fprintf(stderr, "[!] Can't hammer row %ld - only got %ld/%ld pages "
           "in the rows above/below\n",
           row_index+1, pages_per_row[row_index].size(), 
           pages_per_row[row_index+2].size());
       continue;
     } else if (pages_per_row[row_index+1].size() == 0) {
-      printf("[!] Can't hammer row %ld, got no pages from that row\n", 
+      fprintf(stderr, "[!] Can't hammer row %ld, got no pages from that row\n", 
           row_index+1);
       continue;
     }
