@@ -75,6 +75,22 @@ uint64_t GetPageFrameNumber(int pagemap, uint8_t* virtual_address) {
   return page_frame_number;
 }
 
+#define ARCH_X86_SB 1
+#define BIT(addr, idx) ((addr >> idx) & 0x1)
+  
+int GetBankNumber(int64_t paddr)
+{
+  int bank = -1;
+#if ARCH_X86_SB==1
+  bank =
+    (BIT(paddr, 14) ^ BIT(paddr, 18))*1 +
+    (BIT(paddr, 15) ^ BIT(paddr, 19))*2 +
+    (BIT(paddr, 16) ^ BIT(paddr, 20))*4 +
+    (BIT(paddr, 17) ^ BIT(paddr, 21))*8;
+#endif
+  return bank;
+}
+  
 void SetupMapping(uint64_t* mapping_size, void** mapping) {
   *mapping_size = 
     static_cast<uint64_t>((static_cast<double>(GetPhysicalMemorySize()) * 
@@ -141,7 +157,7 @@ uint64_t HammerAllReachablePages(uint64_t presumed_row_size,
     uint64_t page_frame_number = GetPageFrameNumber(pagemap, virtual_address);
     uint64_t physical_address = page_frame_number * 0x1000;
     uint64_t presumed_row_index = physical_address / presumed_row_size;
-    //printf("[!] put va %lx pa %lx into row %ld\n", (uint64_t)virtual_address,
+    // printf("[!] put va %lx pa %lx into row %ld\n", (uint64_t)virtual_address,
     //    physical_address, presumed_row_index);
     if (presumed_row_index > pages_per_row.size()) {
       pages_per_row.resize(presumed_row_index);
@@ -185,23 +201,36 @@ uint64_t HammerAllReachablePages(uint64_t presumed_row_size,
         std::pair<uint64_t, uint64_t> second_page_range(
             reinterpret_cast<uint64_t>(second_row_page),
             reinterpret_cast<uint64_t>(second_row_page+0x1000));
-        hammer(first_page_range, second_page_range, number_of_reads);
+
+	int64_t first_paddr = GetPageFrameNumber(pagemap, first_row_page)*0x1000;
+	int64_t second_paddr = GetPageFrameNumber(pagemap, second_row_page)*0x1000;
+	int first_bank = GetBankNumber(first_paddr);
+	int second_bank =  GetBankNumber(second_paddr);
+	
+	if (first_bank != second_bank) {
+	  fprintf(stderr, "skip hammering %lx (B=%d) and %lx (B=%d)\n",
+		 first_paddr, first_bank, second_paddr, second_bank);
+	  continue;
+	}
+	hammer(first_page_range, second_page_range, number_of_reads);
         // Now check the target pages.
         uint64_t number_of_bitflips_in_target = 0;
         for (const uint8_t* target_page : pages_per_row[row_index+1]) {
           for (uint32_t index = 0; index < 0x1000; ++index) {
             if (target_page[index] != 0xFF) {
               ++number_of_bitflips_in_target;
+	      int64_t target_paddr = GetPageFrameNumber(pagemap, (uint8_t*)target_page)*0x1000;
+	      printf("[!] Found a flip at %lx (B=%d)\n", target_paddr,
+		     GetBankNumber(target_paddr));
             }
           }
         }
         if (number_of_bitflips_in_target > 0) {
           printf("[!] Found %ld flips in row %ld (%lx to %lx) when hammering "
-              "%lx and %lx\n", number_of_bitflips_in_target, row_index+1,
+              "%lx (B=%d) and %lx (B=%d)\n", number_of_bitflips_in_target, row_index+1,
               ((row_index+1)*presumed_row_size), 
               ((row_index+2)*presumed_row_size)-1,
-              GetPageFrameNumber(pagemap, first_row_page)*0x1000, 
-              GetPageFrameNumber(pagemap, second_row_page)*0x1000);
+		 first_paddr, first_bank, second_paddr, second_bank);
           total_bitflips += number_of_bitflips_in_target;
         }
       }
